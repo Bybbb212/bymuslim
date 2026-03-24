@@ -1206,6 +1206,9 @@ export default function ByMuslim() {
   const [showAr,     setShowAr]    = useState(true);
   const [showTr,     setShowTr]    = useState(true);
   const [showFr,     setShowFr]    = useState(true);
+  const [verses,     setVerses]    = useState([]);
+  const [loading,    setLoading]   = useState(false);
+  const [cache,      setCache]     = useState({});
   // Dhikr
   const [dhikrTab,   setDhikrTab]  = useState("tasbih");
   const [openAid,    setOpenAid]   = useState(false);
@@ -1230,6 +1233,29 @@ export default function ByMuslim() {
     setSelected(s); setLastRead({n:s.n,v:1});
     setRecent(r=>[s.n,...r.filter(x=>x!==s.n)].slice(0,5));
     setView("read");
+    // Al-Fatiha déjà en local
+    if (s.n === 1) { setVerses(FATIHA_AYAHS); return; }
+    // Vérifier le cache
+    if (cache[s.n]) { setVerses(cache[s.n]); return; }
+    // Appel API
+    setLoading(true);
+    setVerses([]);
+    fetch(`https://api.quran.com/api/v4/verses/by_chapter/${s.n}?language=fr&words=true&translations=136&per_page=300&fields=text_uthmani&word_fields=transliteration`)
+      .then(r => r.json())
+      .then(data => {
+        const parsed = data.verses.map(v => ({
+          ar: v.text_uthmani,
+          tr: v.words.map(w => w.transliteration?.text || "").join(" ").trim(),
+          fr: v.translations?.[0]?.text?.replace(/<[^>]*>/g,"") || "",
+        }));
+        setVerses(parsed);
+        setCache(c => ({...c, [s.n]: parsed}));
+        setLoading(false);
+      })
+      .catch(() => {
+        setVerses([{ar:"خطأ في التحميل", tr:"Erreur de chargement", fr:"Impossible de charger les versets. Vérifiez votre connexion."}]);
+        setLoading(false);
+      });
   };
   const toggleFav = (n,e) => {
     e.stopPropagation();
@@ -1519,14 +1545,20 @@ export default function ByMuslim() {
               </div>
             )}
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {(selected.n===1 ? FATIHA_AYAHS : Array.from({length:Math.min(selected.v,5)},(_,i)=>({ar:"﴿ الآية "+(i+1)+" ﴾", tr:"— Translittération —", fr:`Verset ${i+1} — API Quran.com`}))).map((v,i)=>(
-                <div key={i} style={{ padding:"12px 14px", background:t.versetBg, border:`1px solid ${t.versetBorder}`, borderRadius:12, boxShadow:t.cardShadow }}>
+              {loading && (
+                <div style={{ textAlign:"center", padding:"40px 20px", color:t.muted }}>
+                  <div style={{ fontFamily:"'Traditional Arabic',serif", fontSize:28, color:t.ar, marginBottom:12 }}>بِسْمِ اللَّهِ</div>
+                  <div style={{ fontSize:12, fontStyle:"italic" }}>Chargement des versets...</div>
+                </div>
+              )}
+              {!loading && verses.map((v,i)=>(
+                <div key={i} id={"v-"+(i+1)} style={{ padding:"12px 14px", background:t.versetBg, border:`1px solid ${t.versetBorder}`, borderRadius:12, boxShadow:t.cardShadow }}>
                   <div style={{ display:"flex", gap:10, alignItems:"flex-start" }}>
                     <div style={{ width:26, height:26, flexShrink:0, background:t.tagOn, border:`1px solid ${t.tagOnBorder}`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, fontWeight:"700", color:t.tagOnColor, marginTop:2 }}>{i+1}</div>
                     <div style={{ flex:1 }}>
                       {showAr && <div style={{ fontFamily:"'Traditional Arabic',serif", fontSize:22, color:t.ar, direction:"rtl", lineHeight:2, textAlign:"right", marginBottom:(showTr||showFr)?8:0, paddingBottom:(showTr||showFr)?8:0, borderBottom:(showTr||showFr)?`1px solid ${t.cardBorder}`:"none" }}>{v.ar}</div>}
-                      {showTr && <div style={{ fontSize:12, color:t.gold, fontStyle:"italic", lineHeight:1.7, marginBottom:showFr?6:0, paddingBottom:showFr?6:0, borderBottom:showFr?`1px solid ${t.cardBorder}`:"none" }}>{v.tr}</div>}
-                      {showFr && <div style={{ fontSize:12, color:t.muted, lineHeight:1.7 }}>{v.fr}</div>}
+                      {showTr && v.tr && <div style={{ fontSize:12, color:t.gold, fontStyle:"italic", lineHeight:1.7, marginBottom:showFr?6:0, paddingBottom:showFr?6:0, borderBottom:showFr?`1px solid ${t.cardBorder}`:"none" }}>{v.tr}</div>}
+                      {showFr && v.fr && <div style={{ fontSize:12, color:t.muted, lineHeight:1.7 }}>{v.fr}</div>}
                     </div>
                   </div>
                 </div>
